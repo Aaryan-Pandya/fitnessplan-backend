@@ -42,6 +42,10 @@ function calculateAgeAndBand(dobText) {
   const dob = new Date(dobText);
   const today = new Date();
 
+  if (Number.isNaN(dob.getTime())) {
+    return { age: -1, ageBand: "unsupported" };
+  }
+
   let age = today.getFullYear() - dob.getFullYear();
   const monthDiff = today.getMonth() - dob.getMonth();
 
@@ -73,76 +77,90 @@ export default {
     }
 
     if (url.pathname === "/init") {
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          email TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
-          salt TEXT NOT NULL,
-          display_name TEXT,
-          dob TEXT,
-          age INTEGER,
-          age_band TEXT,
-          parent_required INTEGER DEFAULT 0,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
+      try {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            display_name TEXT,
+            dob TEXT,
+            age INTEGER,
+            age_band TEXT,
+            parent_required INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
 
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS sessions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          token TEXT NOT NULL UNIQUE,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
 
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS saved_plans (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          plan_name TEXT,
-          plan_json TEXT NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS saved_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plan_name TEXT,
+            plan_json TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
 
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS progress_logs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          log_date TEXT NOT NULL,
-          notes TEXT,
-          progress_json TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS progress_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            log_date TEXT NOT NULL,
+            notes TEXT,
+            progress_json TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
 
-      return new Response("Database initialized", {
-        headers: getCorsHeaders(origin)
-      });
+        return new Response("Database initialized", {
+          headers: getCorsHeaders(origin)
+        });
+      } catch (error) {
+        return jsonResponse({
+          error: "Init failed",
+          details: String(error)
+        }, 500, origin);
+      }
     }
 
     if (url.pathname === "/signup" && request.method === "POST") {
       try {
         const body = await request.json();
+
         const email = String(body.email || "").trim().toLowerCase();
         const password = String(body.password || "");
         const displayName = String(body.displayName || "").trim();
         const dob = String(body.dob || "").trim();
 
         if (!email || !password || !displayName || !dob) {
-          return jsonResponse({ error: "Missing required fields." }, 400, origin);
+          return jsonResponse({
+            error: "Missing required fields."
+          }, 400, origin);
         }
 
         if (password.length < 8) {
-          return jsonResponse({ error: "Password must be at least 8 characters." }, 400, origin);
+          return jsonResponse({
+            error: "Password must be at least 8 characters."
+          }, 400, origin);
         }
 
         const { age, ageBand } = calculateAgeAndBand(dob);
 
         if (ageBand === "unsupported") {
-          return jsonResponse({ error: "This app currently supports age 9 and up." }, 400, origin);
+          return jsonResponse({
+            error: "This app currently supports age 9 and up."
+          }, 400, origin);
         }
 
         const parentRequired = age < 13 ? 1 : 0;
@@ -165,7 +183,18 @@ export default {
           .bind(email, passwordHash, salt, displayName, dob, age, ageBand, parentRequired)
           .run();
 
-        const userId = result.meta.last_row_id;
+        const userId =
+          result?.meta?.last_row_id ??
+          result?.meta?.last_row_id?.toString?.() ??
+          null;
+
+        if (!userId) {
+          return jsonResponse({
+            error: "User was created but user ID was not returned.",
+            details: JSON.stringify(result)
+          }, 500, origin);
+        }
+
         const sessionToken = randomToken(24);
 
         await env.DB.prepare(`
@@ -181,14 +210,17 @@ export default {
           user: {
             id: userId,
             email,
-            displayName,
+            username: displayName,
             age,
             ageBand,
             parentRequired: !!parentRequired
           }
         }, 200, origin);
       } catch (error) {
-        return jsonResponse({ error: "Signup failed. Email may already exist." }, 400, origin);
+        return jsonResponse({
+          error: "Signup failed",
+          details: String(error)
+        }, 400, origin);
       }
     }
 
@@ -199,7 +231,9 @@ export default {
         const password = String(body.password || "");
 
         if (!email || !password) {
-          return jsonResponse({ error: "Missing email or password." }, 400, origin);
+          return jsonResponse({
+            error: "Missing email or password."
+          }, 400, origin);
         }
 
         const userResult = await env.DB.prepare(`
@@ -211,13 +245,17 @@ export default {
           .first();
 
         if (!userResult) {
-          return jsonResponse({ error: "Invalid login." }, 401, origin);
+          return jsonResponse({
+            error: "Invalid login."
+          }, 401, origin);
         }
 
         const passwordHash = await sha256(`${userResult.salt}:${password}`);
 
         if (passwordHash !== userResult.password_hash) {
-          return jsonResponse({ error: "Invalid login." }, 401, origin);
+          return jsonResponse({
+            error: "Invalid login."
+          }, 401, origin);
         }
 
         const sessionToken = randomToken(24);
@@ -235,14 +273,17 @@ export default {
           user: {
             id: userResult.id,
             email: userResult.email,
-            displayName: userResult.display_name,
+            username: userResult.display_name,
             age: userResult.age,
             ageBand: userResult.age_band,
             parentRequired: !!userResult.parent_required
           }
         }, 200, origin);
       } catch (error) {
-        return jsonResponse({ error: "Login failed." }, 500, origin);
+        return jsonResponse({
+          error: "Login failed",
+          details: String(error)
+        }, 500, origin);
       }
     }
 
@@ -252,7 +293,9 @@ export default {
         const token = authHeader.replace("Bearer ", "").trim();
 
         if (!token) {
-          return jsonResponse({ error: "Missing token." }, 401, origin);
+          return jsonResponse({
+            error: "Missing token."
+          }, 401, origin);
         }
 
         const sessionResult = await env.DB.prepare(`
@@ -271,7 +314,9 @@ export default {
           .first();
 
         if (!sessionResult) {
-          return jsonResponse({ error: "Invalid session." }, 401, origin);
+          return jsonResponse({
+            error: "Invalid session."
+          }, 401, origin);
         }
 
         return jsonResponse({
@@ -279,14 +324,17 @@ export default {
           user: {
             id: sessionResult.id,
             email: sessionResult.email,
-            displayName: sessionResult.display_name,
+            username: sessionResult.display_name,
             age: sessionResult.age,
             ageBand: sessionResult.age_band,
             parentRequired: !!sessionResult.parent_required
           }
         }, 200, origin);
       } catch (error) {
-        return jsonResponse({ error: "Failed to load current user." }, 500, origin);
+        return jsonResponse({
+          error: "Failed to load current user.",
+          details: String(error)
+        }, 500, origin);
       }
     }
 
