@@ -3,50 +3,30 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/init") {
-      await env.DB.exec(`
+      await env.DB.prepare(`
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          email TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
+          email TEXT UNIQUE,
+          password_hash TEXT,
           display_name TEXT,
           dob TEXT,
           age INTEGER,
-          age_band TEXT,
-          parent_required INTEGER DEFAULT 0,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
+        )
+      `).run();
 
-        CREATE TABLE IF NOT EXISTS sessions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          token TEXT NOT NULL UNIQUE,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-
+      await env.DB.prepare(`
         CREATE TABLE IF NOT EXISTS saved_plans (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          plan_name TEXT,
-          plan_json TEXT NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS progress_logs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          log_date TEXT NOT NULL,
-          notes TEXT,
-          progress_json TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-      `);
+          user_id INTEGER,
+          plan_json TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run();
 
       return new Response("Database initialized");
     }
 
-    return new Response("FitnessPlan backend is live");
-  },
-};
+    return new Response("FitnessPlan backend live");
+  }
+}
