@@ -1,5 +1,12 @@
 {
   "name": "fitnessplan-backend",
   "main": "src/index.js",
-  "compatibility_date": "2026-04-19"
+  "compatibility_date": "2026-04-19",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fitnessplan-db",
+      "database_id": "db58feb2-7a66-4f42-bf71-29467e0df729"
+    }
+  ]
 }
