@@ -1,4 +1,4 @@
-const ALLOWED_ORIGIN = "YOUR_FRONTEND_URL_HERE";
+const ALLOWED_ORIGIN = "https://fitnessplan.pages.dev";
 
 function getCorsHeaders(origin = "") {
   if (origin === ALLOWED_ORIGIN) {
