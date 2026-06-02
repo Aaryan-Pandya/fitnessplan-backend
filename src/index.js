@@ -59,7 +59,27 @@ export default {
 
         return json({ ok: true, message: "Database reset complete. Now open /init." });
       }
+      if (url.pathname === "/ai-plan" && request.method === "POST") {
+  const body = await readBody();
+  const prompt = String(body.prompt || "");
 
+  if (!prompt.trim()) {
+    return json(
+      {
+        ok: false,
+        error: "Missing prompt."
+      },
+      400
+    );
+  }
+
+  return json({
+    ok: true,
+    mode: "test",
+    message: "AI endpoint received the prompt.",
+    promptLength: prompt.length
+  });
+}
       if (url.pathname === "/signup" && request.method === "POST") {
         const body = await request.json();
 
