@@ -62,18 +62,18 @@ export default {
       if (url.pathname === "/ai-plan" && request.method === "POST") {
   let body = {};
 
-try {
-  body = await request.json();
-} catch {
-  return json(
-    {
-      ok: false,
-      error: "Invalid JSON body."
-    },
-    400
-  );
-}
-        
+  try {
+    body = await request.json();
+  } catch {
+    return json(
+      {
+        ok: false,
+        error: "Invalid JSON body."
+      },
+      400
+    );
+  }
+
   const prompt = String(body.prompt || "");
 
   if (!prompt.trim()) {
@@ -86,11 +86,78 @@ try {
     );
   }
 
+  if (!env.GEMINI_API_KEY) {
+    return json(
+      {
+        ok: false,
+        error: "Missing GEMINI_API_KEY secret."
+      },
+      500
+    );
+  }
+
+  const geminiResponse = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": env.GEMINI_API_KEY
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.35,
+          maxOutputTokens: 5000
+        }
+      })
+    }
+  );
+
+  const geminiData = await geminiResponse.json().catch(() => ({}));
+
+  if (!geminiResponse.ok) {
+    return json(
+      {
+        ok: false,
+        error: "Gemini API failed.",
+        details: geminiData
+      },
+      500
+    );
+  }
+
+  const aiText =
+    geminiData?.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("")
+      .trim() || "";
+
+  if (!aiText) {
+    return json(
+      {
+        ok: false,
+        error: "Gemini returned an empty response.",
+        details: geminiData
+      },
+      500
+    );
+  }
+
   return json({
     ok: true,
-    mode: "test",
-    message: "AI endpoint received the prompt.",
-    promptLength: prompt.length
+    mode: "gemini",
+    model: "gemini-2.5-flash-lite",
+    promptLength: prompt.length,
+    text: aiText
   });
 }
       if (url.pathname === "/signup" && request.method === "POST") {
