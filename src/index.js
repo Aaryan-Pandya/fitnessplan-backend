@@ -60,7 +60,20 @@ export default {
         return json({ ok: true, message: "Database reset complete. Now open /init." });
       }
       if (url.pathname === "/ai-plan" && request.method === "POST") {
-  const body = await readBody();
+  let body = {};
+
+try {
+  body = await request.json();
+} catch {
+  return json(
+    {
+      ok: false,
+      error: "Invalid JSON body."
+    },
+    400
+  );
+}
+        
   const prompt = String(body.prompt || "");
 
   if (!prompt.trim()) {
